@@ -3,6 +3,7 @@ Downloader amazon cloud drive
 ===============================
 
 Images downloader for folder in Amazon cloud
+Uses asycio so tested python >= 3.4
 
 .. code-block:: bash
 
@@ -12,7 +13,7 @@ usage:
 
 .. code-block:: bash
 
-    python downloader.py https://www.amazon.com/clouddrive/share/7FDg46D18TepcOoyS7HPuU9oVCvNhBMuFDvu2fRA6qR/folder/EnUiZP-JR5KGXJ3FGvDPUw
+    python3 downloader.py https://www.amazon.com/clouddrive/share/7FDg46D18TepcOoyS7HPuU9oVCvNhBMuFDvu2fRA6qR/folder/EnUiZP-JR5KGXJ3FGvDPUw
 
 or:
 

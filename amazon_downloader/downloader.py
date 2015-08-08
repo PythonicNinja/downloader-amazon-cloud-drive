@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-# -*- coding: utf-8 -*-
 # CREATED ON DATE: 27.07.15
 __author__ = 'mail@pythonic.ninja'
 
@@ -7,8 +6,8 @@ import re
 import os
 import sys
 import json
-import urllib2
-from threading import Thread
+import aiohttp
+import asyncio
 
 
 class AmazonDownloader(object):
@@ -22,16 +21,26 @@ class AmazonDownloader(object):
             self.process_images = (
                 AmazonDownloader.optimize_save,
             )
-        print 'Images to collect: ', len(images_links)
+        print('Images to collect: ', len(images_links))
         self.download_parallel(links=images_links)
 
-    def download(self, url):
-        response = urllib2.urlopen(url)
-        print 'downloading:', url
-        return response.read()
+    @classmethod
+    @asyncio.coroutine
+    def download(cls, future, url):
+        response = yield from aiohttp.request('GET', url)
+        if response.status == 200:
+            print("data fetched successfully for: %s" % url)
+        else:
+            print("data fetch failed for: %s" % url)
+            print(response.content, response.status)
+
+        content = yield from response.read()
+        future.set_result(content)
 
     def download_image(self, link, name, view_box=1200):
-        image = self.download(link+'?viewBox='+str(view_box))
+        future = asyncio.Future()
+        yield from self.download(future, link+'?viewBox='+str(view_box))
+        image = future.result()
 
         for process in self.process_images:
             image = process(image, name)
@@ -41,12 +50,15 @@ class AmazonDownloader(object):
     def download_image_list(self, api_url):
         links = []
         page = 0
+        loop = asyncio.get_event_loop()
         while True:
-            api_data = json.loads(self.download(api_url + '&offset=' + str(page)))
+            future = asyncio.Future()
+            loop.run_until_complete(asyncio.wait([AmazonDownloader.download(future=future, url=api_url + '&offset=' + str(page))]))
+            api_data = json.loads(future.result().decode('utf-8'))
             count = api_data['count']
             for data in api_data['data']:
                 links.append((data['tempLink'], data['name']))
-            print 'images already found:', len(links)
+            print('images already found:', len(links))
             if len(links) != count:
                 page += 200
             else:
@@ -57,7 +69,7 @@ class AmazonDownloader(object):
     def optimize_save(cls, image, name, directory='downloaded'):
         if not os.path.exists(directory):
             os.makedirs(directory)
-        with open(os.path.join(directory, name), 'w') as file_img:
+        with open(os.path.join(directory, name), 'wb') as file_img:
             file_img.write(image)
 
     def transform_url(self, share_link):
@@ -66,12 +78,18 @@ class AmazonDownloader(object):
         return self.url_api % groups
 
     def download_parallel(self, links, download_function=None):
+        loop = asyncio.get_event_loop()
+
         if not download_function:
             download_function = self.download_image
 
-        for i, link in enumerate(links):
-            print str(i)+'/'+str(len(links))
-            Thread(target=download_function, args=(link[0], link[1])).start()
+        def download():
+            yield from asyncio.gather(*[
+                asyncio.Task(download_function(link[0], link[1]))
+                for link in links
+            ])
+
+        loop.run_until_complete(download())
 
 
 if __name__ == '__main__':
